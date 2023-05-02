@@ -2,9 +2,8 @@ local background = {}
 
 local colors = {
     {1, 0, 0},
-    {0, 1, 0},
     {0, 0, 1},
-    {1, 1, 0}
+    {0, 0, 0},
   }
   
   local currentColorIndex = 1

@@ -11,6 +11,8 @@ function factory.createBox(config)
     box.fixture:setRestitution(config.boxBounciness) -- Set restitution (bounciness) for box
     box.body:setLinearDamping(5)
     box.body:setAngularDamping(5) 
+    box.trail = {}
+    box.maxTrailLength = 20
     return box
 end
 
@@ -23,5 +25,36 @@ function factory.createGround(config)
     return ground
 end
 
+function factory.createBackgroundGround(config)
+    local backgroundGround = {}
+    backgroundGround.rectangles = {}
+
+    -- Configuration for the number of rectangles and their size range
+    local numRectangles = config.numRectangles or 300
+    local minWidth = config.minWidth or 30
+    local maxWidth = config.maxWidth or 600
+    local minHeight = config.minHeight or 30
+    local maxHeight = config.maxHeight or 80
+
+    -- Create the random rectangles
+    for i = 1, numRectangles do
+        local rectangle = {
+            x = math.random(-love.graphics.getWidth() * 3, love.graphics.getWidth() * 3),
+            y = math.random(-love.graphics.getHeight() * 3, love.graphics.getHeight() * 3),
+            width = math.random(minWidth, maxWidth),
+            height = math.random(minHeight, maxHeight),
+            color = {
+                r = 255,
+                g = 255,
+                b = 255,
+                a = math.random(1, 5) / 10,
+            },
+        }
+        table.insert(backgroundGround.rectangles, rectangle)
+    end
+
+    return backgroundGround
+
+end
 
 return factory
