@@ -21,6 +21,7 @@ local states = {
   inverting = false,
   invertingBack = false,
 
+  width = 50,
   height = 50
 }
 
@@ -75,29 +76,8 @@ function love.update(dt)
     timers.secondJump = timers.secondJump - dt
     timers.justFirstJumped = timers.justFirstJumped - dt
 
-    -- Update inverting
-    if states.inverting == true then
-      invertingProgress = invertingProgress + 1.5 * dt
-      states.height = states.height + 45 * dt
-      setBoxHeight(box, states.height) 
-      if invertingProgress > 1 then
-        invertingProgress = 1
-        invertingBackProgress = 1
-        states.inverting = false
-      end
-    end
-
-    -- Update inverting back
-    if states.invertingBack == true then
-      invertingBackProgress = invertingBackProgress - 1.5 * dt
-      states.height = states.height - 45 * dt
-      setBoxHeight(box, states.height) 
-      if invertingBackProgress < 0 then
-        invertingBackProgress = 0
-        invertingProgress = 0
-        states.invertingBack = false
-      end
-    end
+    -- Invert black / white
+    playerInvert(dt)
 
     -- Update background color
     background.update(dt)
@@ -111,6 +91,46 @@ function love.update(dt)
         table.remove(box.trail)
     end
 
+    -- Move background rectangles, subtract from flipColorTimer
+    for _, rectangle in ipairs(backgroundGround.rectangles) do
+      rectangle.y = rectangle.y + oscillator / 3 * rectangle.color.a
+      rectangle.flipColorTimer = rectangle.flipColorTimer - dt * 1
+
+      -- If the rectangle has reached its peak
+      if rectangle.flipColorTimer <= 0 then
+
+        -- Reset timer
+        local flipColorMinSeconds = 0.15
+        local flipColorMaxSeconds = 6.15
+        local flipColorTimer = flipColorMinSeconds + (flipColorMaxSeconds - flipColorMinSeconds) * math.random()
+        rectangle.flipColorTimer = flipColorTimer
+
+        -- Change rectangle's state
+        if rectangle.colorComponent == 0 then
+          rectangle.state = "inverting"
+        else
+          rectangle.state = "normalizing"
+        end
+      end
+
+      -- Invert / normalize step
+      if rectangle.state == "inverting" then
+        rectangle.colorComponent = rectangle.colorComponent + dt * 0.1
+        
+        -- Back to idle
+        if rectangle.colorComponent >= 1 then
+          rectangle.state = "idle"
+        end
+      elseif rectangle.state == "normalizing" then
+        rectangle.colorComponent = rectangle.colorComponent - dt * 0.1
+
+        -- Back to idle
+        if rectangle.colorComponent <= 0 then
+          rectangle.state = "idle"
+        end
+      end
+    end
+
 end
 
 function love.draw()
@@ -122,15 +142,16 @@ function love.draw()
 
     -- Draw the background rectangles
     for _, rectangle in ipairs(backgroundGround.rectangles) do
-      love.graphics.setColor(0, 0, 0, rectangle.color.a)
-      love.graphics.rectangle("fill", rectangle.x, rectangle.y + oscillator * backgroundOscillation * rectangle.color.a, rectangle.width, rectangle.height)
+      cc = rectangle.colorComponent
+      love.graphics.setColor(cc, cc, cc, rectangle.color.a)
+      love.graphics.rectangle("fill", rectangle.x, rectangle.y, rectangle.width, rectangle.height)
     end
 
     -- Draw the ground
     love.graphics.setColor(1, 1, 1)
     love.graphics.polygon("fill", ground.body:getWorldPoints(ground.shape:getPoints()))
 
-    -- Draw the box
+    -- Set everything to draw the box
     love.graphics.setShader(shader)
     shader:send("opacity", 1)
 
@@ -141,20 +162,21 @@ function love.draw()
       shader:send("progress", invertingBackProgress)
     end
     
-    love.graphics.setColor(1, 1, 1)
+    -- Draw box
+    love.graphics.setColor(1, 1, 1, 1)
     love.graphics.polygon("fill", box.body:getWorldPoints(box.shape:getPoints()))
-    
+
     -- Draw trail
     for i, pos in ipairs(box.trail) do
-      local alpha = (0.7 - i / box.maxTrailLength)
+      local alpha = (0.45 - i / box.maxTrailLength)
       shader:send("opacity", alpha)
-      local corners = getRotatedBoxCorners(pos.x, pos.y, 50, 50, pos.angle)
+      local corners = getRotatedBoxCorners(pos.x, pos.y, states.width, states.height, pos.angle)
       love.graphics.polygon("fill", corners)
     end
 
-    love.graphics.setColor(255, 255, 255)
-
+    
     -- Clean up 
+    love.graphics.setColor(255, 255, 255)
     love.graphics.setShader()
     love.graphics.pop()
 
@@ -167,7 +189,22 @@ function setBoxHeight(box, newHeight)
   box.fixture:destroy()
 
   -- Create a new shape with the new height
-  local newShape = physics.newRectangleShape(50, newHeight)
+  local newShape = physics.newRectangleShape(states.width, newHeight)
+
+  -- Create a new fixture and attach it to the body
+  box.fixture = physics.newFixture(box.body, newShape, 1) -- Density is 1
+  box.fixture:setRestitution(box.fixture:getRestitution()) -- Keep the same restitution (bounciness)
+
+  -- Update the box's shape
+  box.shape = newShape
+end
+
+function setBoxWidth(box, newWidth)
+  -- Remove the old fixture
+  box.fixture:destroy()
+
+  -- Create a new shape with the new height
+  local newShape = physics.newRectangleShape(newWidth, states.height)
 
   -- Create a new fixture and attach it to the body
   box.fixture = physics.newFixture(box.body, newShape, 1) -- Density is 1
@@ -231,6 +268,36 @@ function playerMovement(dt)
     -- Apply force to the box's body based on arrow key input
     box.body:applyForce(forceX, forceY)
 
+end
+
+function playerInvert(dt)
+    -- Update inverting
+    if states.inverting == true then
+      invertingProgress = invertingProgress + 1.5 * dt
+      states.height = states.height + 45 * dt
+      setBoxHeight(box, states.height) 
+      states.width = states.width - 30 * dt
+      setBoxWidth(box, states.width) 
+      if invertingProgress > 1 then
+        invertingProgress = 1
+        invertingBackProgress = 1
+        states.inverting = false
+      end
+    end
+
+    -- Update inverting back
+    if states.invertingBack == true then
+      invertingBackProgress = invertingBackProgress - 1.5 * dt
+      states.height = states.height - 45 * dt
+      setBoxHeight(box, states.height) 
+      states.width = states.width + 30 * dt
+      setBoxWidth(box, states.width) 
+      if invertingBackProgress < 0 then
+        invertingBackProgress = 0
+        invertingProgress = 0
+        states.invertingBack = false
+      end
+    end
 end
 
 -- Utils

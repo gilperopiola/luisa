@@ -36,6 +36,11 @@ function factory.createBackgroundGround(config)
     local minHeight = config.minHeight or 30
     local maxHeight = config.maxHeight or 80
 
+    -- Time to flip color
+    local flipColorMinSeconds = 0.15
+    local flipColorMaxSeconds = 6.15
+    local flipColorTimer = flipColorMinSeconds + (flipColorMaxSeconds - flipColorMinSeconds) * math.random()
+
     -- Create the random rectangles
     for i = 1, numRectangles do
         local rectangle = {
@@ -49,6 +54,10 @@ function factory.createBackgroundGround(config)
                 b = 255,
                 a = math.random(1, 5) / 10,
             },
+            flipColorTimer = flipColorTimer,
+            colorComponent = 0,
+            state = "idle",
+            trail = {}
         }
         table.insert(backgroundGround.rectangles, rectangle)
     end
