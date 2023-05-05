@@ -17,12 +17,26 @@ function factory.createBox(config)
 end
 
 function factory.createGround(config)
+    local grounds = {}
+    grounds.grounds = {}
+
     ground = {}
     ground.body = physics.newBody(world, love.graphics.getWidth() / 2, love.graphics.getHeight() - 50)
     ground.shape = physics.newRectangleShape(love.graphics.getWidth(), 70)
     ground.fixture = physics.newFixture(ground.body, ground.shape)
     ground.fixture:setFriction(config.floorFriction) -- Set friction for ground
-    return ground
+
+    table.insert(grounds.grounds, ground)
+    
+    ground = {}
+    ground.body = physics.newBody(world, love.graphics.getWidth() / 2, love.graphics.getHeight() + 180)
+    ground.shape = physics.newRectangleShape(love.graphics.getWidth(), 70)
+    ground.fixture = physics.newFixture(ground.body, ground.shape)
+    ground.fixture:setFriction(config.floorFriction) -- Set friction for ground
+
+    table.insert(grounds.grounds, ground)
+
+    return grounds
 end
 
 function factory.createBackgroundGround(config)

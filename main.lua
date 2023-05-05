@@ -1,34 +1,13 @@
 local love = require("love")
 local physics = love.physics
 
+local config = require("config")
+local state = require("state")
+local timers = require("timers")
+
+local player = require("player")
 local background = require("background")
 local factory = require("factory")
-
-local config = {
-    gravity = 9.81,
-    pixelsPerMeter = 64,
-
-    boxMovementForce = 5000,
-    boxJumpForce = 89000,
-    boxRotationForce = 24000,
-    boxBounciness = 0.7,
-    floorFriction = 0.6,
-}
-
-local states = {
-  collidingWithFloor = false,
-  hasDoubleJumped = false,
-  inverting = false,
-  invertingBack = false,
-
-  width = 50,
-  height = 50
-}
-
-local timers = {
-  justFirstJumped = 0.0,
-  secondJump = 0.0
-}
 
 local oscillator = 0
 local backgroundOscillation = 25
@@ -44,8 +23,6 @@ local shaderCode = [[
         return texcolor * color;
     }
 ]]
-local invertingProgress = 0
-local invertingBackProgress = 1
 local shader 
 
 function love.load()
@@ -58,7 +35,7 @@ function love.load()
 
     -- Create entities
     backgroundGround = factory.createBackgroundGround({})
-    ground = factory.createGround(config)
+    grounds = factory.createGround(config)
     box = factory.createBox(config)
 end
 
@@ -69,12 +46,10 @@ function love.update(dt)
     world:update(dt)  
 
     -- Move player
-    playerMovement(dt)
-    playerActions(dt)
+    player.update(box, state, timers, dt)
 
     -- Update timers
-    timers.secondJump = timers.secondJump - dt
-    timers.justFirstJumped = timers.justFirstJumped - dt
+    timers.update(dt)
 
     -- Invert black / white
     playerInvert(dt)
@@ -85,50 +60,9 @@ function love.update(dt)
     -- Oscillator
     oscillator = math.sin(love.timer.getTime() * 0.1 * math.pi * 2)
 
-    -- Box trail
-    table.insert(box.trail, 1, {x = box.body:getX(), y = box.body:getY(), angle = box.body:getAngle()})
-    if #box.trail > box.maxTrailLength then
-        table.remove(box.trail)
-    end
-
-    -- Move background rectangles, subtract from flipColorTimer
+    -- Move background rectangles
     for _, rectangle in ipairs(backgroundGround.rectangles) do
       rectangle.y = rectangle.y + oscillator / 3 * rectangle.color.a
-      rectangle.flipColorTimer = rectangle.flipColorTimer - dt * 1
-
-      -- If the rectangle has reached its peak
-      if rectangle.flipColorTimer <= 0 then
-
-        -- Reset timer
-        local flipColorMinSeconds = 0.15
-        local flipColorMaxSeconds = 6.15
-        local flipColorTimer = flipColorMinSeconds + (flipColorMaxSeconds - flipColorMinSeconds) * math.random()
-        rectangle.flipColorTimer = flipColorTimer
-
-        -- Change rectangle's state
-        if rectangle.colorComponent == 0 then
-          rectangle.state = "inverting"
-        else
-          rectangle.state = "normalizing"
-        end
-      end
-
-      -- Invert / normalize step
-      if rectangle.state == "inverting" then
-        rectangle.colorComponent = rectangle.colorComponent + dt * 0.1
-        
-        -- Back to idle
-        if rectangle.colorComponent >= 1 then
-          rectangle.state = "idle"
-        end
-      elseif rectangle.state == "normalizing" then
-        rectangle.colorComponent = rectangle.colorComponent - dt * 0.1
-
-        -- Back to idle
-        if rectangle.colorComponent <= 0 then
-          rectangle.state = "idle"
-        end
-      end
     end
 
 end
@@ -148,18 +82,20 @@ function love.draw()
     end
 
     -- Draw the ground
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.polygon("fill", ground.body:getWorldPoints(ground.shape:getPoints()))
+    for _, ground in ipairs(grounds.grounds) do
+      love.graphics.setColor(1, 1, 1)
+      love.graphics.polygon("fill", ground.body:getWorldPoints(ground.shape:getPoints()))
+    end
 
     -- Set everything to draw the box
     love.graphics.setShader(shader)
     shader:send("opacity", 1)
 
-    if states.inverting then
-      shader:send("progress", invertingProgress)
+    if state.inverting then
+      shader:send("progress", state.invertingProgress)
     end
-    if states.invertingBack then
-      shader:send("progress", invertingBackProgress)
+    if state.invertingBack then
+      shader:send("progress", state.invertingBackProgress)
     end
     
     -- Draw box
@@ -170,7 +106,7 @@ function love.draw()
     for i, pos in ipairs(box.trail) do
       local alpha = (0.45 - i / box.maxTrailLength)
       shader:send("opacity", alpha)
-      local corners = getRotatedBoxCorners(pos.x, pos.y, states.width, states.height, pos.angle)
+      local corners = getRotatedBoxCorners(pos.x, pos.y, state.width, state.height, pos.angle)
       love.graphics.polygon("fill", corners)
     end
 
@@ -189,7 +125,7 @@ function setBoxHeight(box, newHeight)
   box.fixture:destroy()
 
   -- Create a new shape with the new height
-  local newShape = physics.newRectangleShape(states.width, newHeight)
+  local newShape = physics.newRectangleShape(state.width, newHeight)
 
   -- Create a new fixture and attach it to the body
   box.fixture = physics.newFixture(box.body, newShape, 1) -- Density is 1
@@ -204,7 +140,7 @@ function setBoxWidth(box, newWidth)
   box.fixture:destroy()
 
   -- Create a new shape with the new height
-  local newShape = physics.newRectangleShape(newWidth, states.height)
+  local newShape = physics.newRectangleShape(newWidth, state.height)
 
   -- Create a new fixture and attach it to the body
   box.fixture = physics.newFixture(box.body, newShape, 1) -- Density is 1
@@ -215,87 +151,33 @@ function setBoxWidth(box, newWidth)
 end
 
 
-function playerActions(dt)
-  if love.keyboard.isDown("space") and states.inverting == false and states.invertingBack == false then
-    if invertingProgress == 0 then 
-      states.inverting = true
-    else
-      states.invertingBack = true
-    end
-  end
-
-end
-
-function playerMovement(dt)
-  
-  local forceX, forceY = 0, 0
-  
-  -- Simple jump
-    if (love.keyboard.isDown("up") or love.keyboard.isDown("w")) and states.collidingWithFloor == true then
-      timers.secondJump = 0.35
-      timers.justFirstJumped = 1.0
-      forceY = -config.boxJumpForce
-    end
-
-    -- Double jump
-    if (love.keyboard.isDown("up") or love.keyboard.isDown("w")) and states.collidingWithFloor == false and states.hasDoubleJumped == false and timers.secondJump <= 0 and timers.justFirstJumped > 0 then
-      states.hasDoubleJumped = true
-      forceY = -config.boxJumpForce
-    end
-
-    -- Move left
-    if love.keyboard.isDown("left") or love.keyboard.isDown("a") then
-      forceX = -config.boxMovementForce
-      box.body:applyTorque(-config.boxRotationForce)
-      if invertingProgress == 1 then
-        forceX = -config.boxMovementForce * 2
-        box.body:applyTorque(-config.boxRotationForce * 2)
-      end
-    end
-
-    -- Move right
-    if love.keyboard.isDown("right") or love.keyboard.isDown("d") then
-      forceX = config.boxMovementForce
-      box.body:applyTorque(config.boxRotationForce)
-
-      -- If black; move more
-      if invertingProgress == 1 then
-        forceX = config.boxMovementForce * 2
-        box.body:applyTorque(config.boxRotationForce * 2)
-      end
-    end
-  
-    -- Apply force to the box's body based on arrow key input
-    box.body:applyForce(forceX, forceY)
-
-end
 
 function playerInvert(dt)
     -- Update inverting
-    if states.inverting == true then
-      invertingProgress = invertingProgress + 1.5 * dt
-      states.height = states.height + 45 * dt
-      setBoxHeight(box, states.height) 
-      states.width = states.width - 30 * dt
-      setBoxWidth(box, states.width) 
-      if invertingProgress > 1 then
-        invertingProgress = 1
-        invertingBackProgress = 1
-        states.inverting = false
+    if state.inverting == true then
+      state.invertingProgress = state.invertingProgress + 1.5 * dt
+      state.height = state.height + 45 * dt
+      setBoxHeight(box, state.height) 
+      state.width = state.width - 30 * dt
+      setBoxWidth(box, state.width) 
+      if state.invertingProgress > 1 then
+        state.invertingProgress = 1
+        state.invertingBackProgress = 1
+        state.inverting = false
       end
     end
 
     -- Update inverting back
-    if states.invertingBack == true then
-      invertingBackProgress = invertingBackProgress - 1.5 * dt
-      states.height = states.height - 45 * dt
-      setBoxHeight(box, states.height) 
-      states.width = states.width + 30 * dt
-      setBoxWidth(box, states.width) 
-      if invertingBackProgress < 0 then
-        invertingBackProgress = 0
-        invertingProgress = 0
-        states.invertingBack = false
+    if state.invertingBack == true then
+      state.invertingBackProgress = state.invertingBackProgress - 1.5 * dt
+      state.height = state.height - 45 * dt
+      setBoxHeight(box, state.height) 
+      state.width = state.width + 30 * dt
+      setBoxWidth(box, state.width) 
+      if state.invertingBackProgress < 0 then
+        state.invertingBackProgress = 0
+        state.invertingProgress = 0
+        state.invertingBack = false
       end
     end
 end
@@ -303,24 +185,32 @@ end
 -- Utils
 
 function beginContact(fixtureA, fixtureB, contact)
-    local isBoxAndGroundCollision =
-      (fixtureA == box.fixture and fixtureB == ground.fixture) or
-      (fixtureA == ground.fixture and fixtureB == box.fixture)
   
-    if isBoxAndGroundCollision then
-      states.collidingWithFloor = true
-      states.hasDoubleJumped = false
+  local isBoxAndGroundCollision = false
+  for _, ground in ipairs(grounds.grounds) do
+    if (fixtureA == box.fixture and fixtureB == ground.fixture) or (fixtureA == ground.fixture and fixtureB == box.fixture) then
+      isBoxAndGroundCollision = true
     end
+  end
+
+  if isBoxAndGroundCollision then
+    state.collidingWithFloor = true
+    state.hasDoubleJumped = false
+  end
 end
   
 function endContact(fixtureA, fixtureB, contact)
-    local isBoxAndGroundCollision =
-      (fixtureA == box.fixture and fixtureB == ground.fixture) or
-      (fixtureA == ground.fixture and fixtureB == box.fixture)
-  
-    if isBoxAndGroundCollision then
-      states.collidingWithFloor = false
+
+  local isBoxAndGroundCollision = false
+  for _, ground in ipairs(grounds.grounds) do
+    if (fixtureA == box.fixture and fixtureB == ground.fixture) or (fixtureA == ground.fixture and fixtureB == box.fixture) then
+      isBoxAndGroundCollision = true
     end
+  end
+  
+  if isBoxAndGroundCollision then
+    state.collidingWithFloor = false
+  end
 end
 
 function lerp(a, b, t)
