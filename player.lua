@@ -1,10 +1,12 @@
 local config = require("config")
+local utils = require("utils")
 
 local player = {}
 
 function player.update(box, state, timers, dt)
     player.move(box, state, timers, dt)
     player.invert(box, state, dt)
+    player.inverting(state, dt)
 
     -- Box trail
     table.insert(box.trail, 1, {x = box.body:getX(), y = box.body:getY(), angle = box.body:getAngle()})
@@ -12,6 +14,62 @@ function player.update(box, state, timers, dt)
         table.remove(box.trail)
     end
 end
+
+function player.draw(box, state, shader)
+    -- Set everything to draw the box
+    love.graphics.setShader(shader)
+    shader:send("opacity", 1)
+
+    if state.inverting then
+      shader:send("progress", state.invertingProgress)
+    end
+    if state.invertingBack then
+      shader:send("progress", state.invertingBackProgress)
+    end
+    
+    -- Draw box
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.polygon("fill", box.body:getWorldPoints(box.shape:getPoints()))
+
+    -- Draw trail
+    for i, pos in ipairs(box.trail) do
+      local alpha = (0.45 - i / box.maxTrailLength)
+      shader:send("opacity", alpha)
+      local corners = utils.getRotatedBoxCorners(pos.x, pos.y, state.width, state.height, pos.angle)
+      love.graphics.polygon("fill", corners)
+    end
+end
+
+function player.inverting(state, dt)
+  -- Update inverting
+  if state.inverting == true then
+    state.invertingProgress = state.invertingProgress + 1.5 * dt
+    state.height = state.height + 45 * dt
+    utils.setBoxHeight(box, state, state.height) 
+    state.width = state.width - 30 * dt
+    utils.setBoxWidth(box, state, state.width) 
+    if state.invertingProgress > 1 then
+      state.invertingProgress = 1
+      state.invertingBackProgress = 1
+      state.inverting = false
+    end
+  end
+
+  -- Update inverting back
+  if state.invertingBack == true then
+    state.invertingBackProgress = state.invertingBackProgress - 1.5 * dt
+    state.height = state.height - 45 * dt
+    utils.setBoxHeight(box, state, state.height) 
+    state.width = state.width + 30 * dt
+    utils.setBoxWidth(box, state, state.width) 
+    if state.invertingBackProgress < 0 then
+      state.invertingBackProgress = 0
+      state.invertingProgress = 0
+      state.invertingBack = false
+    end
+  end
+end
+
 
 function player.invert(box, state, dt)
   if love.keyboard.isDown("space") and state.inverting == false and state.invertingBack == false then
@@ -24,7 +82,6 @@ function player.invert(box, state, dt)
 end
 
 function player.move(box, state, timers, dt)
-  
   local forceX, forceY = 0, 0
   
   -- Simple jump
