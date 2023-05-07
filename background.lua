@@ -25,7 +25,7 @@ function background.update(rectangles, oscillator, dt)
 
     -- Move background rectangles
     for _, rectangle in ipairs(rectangles) do
-        rectangle.y = rectangle.y + oscillator / 3 * rectangle.color.a
+        rectangle.y = rectangle.y + oscillator / 2 * rectangle.color.a
     end
 
 end

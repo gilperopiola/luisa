@@ -27,7 +27,11 @@ local shaderCode = [[
 ]]
 local shader 
 
+local mouseX, mouseY = 0, 0
+
 function love.load()
+
+    -- 800x600 starting resolution
 
     shader = love.graphics.newShader(shaderCode)
 
@@ -66,6 +70,8 @@ function love.draw()
     love.graphics.setColor(255, 255, 255)
     love.graphics.setShader()
     love.graphics.pop()
+
+    love.graphics.print(mouseX .. "/" .. mouseY)
 end
 
 function drawGround()
@@ -79,5 +85,11 @@ function love.keypressed(key)
   if key == "f11" then -- You can change "f11" to any key you want to use for toggling fullscreen
       local isFullscreen = love.window.getFullscreen()
       love.window.setFullscreen(not isFullscreen)
+  end
+end
+
+function love.mousepressed(x, y, button)
+  if button == 1 then  -- check if left mouse button was pressed
+    mouseX, mouseY = x, y  -- save the mouse coordinates
   end
 end

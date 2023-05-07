@@ -16,25 +16,29 @@ function factory.createBox(config)
     return box
 end
 
+local groundsJSON = {
+    {x = 400, y = 550, width = 800, height = 70},
+    {x = 400, y = 780, width = 800, height = 70},
+    {x = 400, y = 1010, width = 800, height = 40},
+    {x = 400, y = 1240, width = 800, height = 20},
+    {x = 400, y = 1470, width = 800, height = 10},
+
+    {x = 775, y = 500, width = 50, height = 50},
+    {x = 25, y = 850, width = 50, height = 350}
+}
+
 function factory.createGround(config)
     local grounds = {}
     grounds.grounds = {}
 
-    ground = {}
-    ground.body = physics.newBody(world, love.graphics.getWidth() / 2, love.graphics.getHeight() - 50)
-    ground.shape = physics.newRectangleShape(love.graphics.getWidth(), 70)
-    ground.fixture = physics.newFixture(ground.body, ground.shape)
-    ground.fixture:setFriction(config.floorFriction) -- Set friction for ground
-
-    table.insert(grounds.grounds, ground)
-    
-    ground = {}
-    ground.body = physics.newBody(world, love.graphics.getWidth() / 2, love.graphics.getHeight() + 180)
-    ground.shape = physics.newRectangleShape(love.graphics.getWidth(), 70)
-    ground.fixture = physics.newFixture(ground.body, ground.shape)
-    ground.fixture:setFriction(config.floorFriction) -- Set friction for ground
-
-    table.insert(grounds.grounds, ground)
+    for _, groundJSON in ipairs(groundsJSON) do
+        ground = {}
+        ground.body = physics.newBody(world, groundJSON.x, groundJSON.y)
+        ground.shape = physics.newRectangleShape(groundJSON.width, groundJSON.height)
+        ground.fixture = physics.newFixture(ground.body, ground.shape)
+        ground.fixture:setFriction(config.floorFriction) 
+        table.insert(grounds.grounds, ground)
+    end
 
     return grounds
 end
